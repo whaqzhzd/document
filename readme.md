@@ -141,6 +141,62 @@ npm install
 npm run dev
 ```
 
+## 🦀 Rust Single-Binary Server
+
+If you want to package the frontend assets and the local static server into a single executable, use the Rust solution in `document/rust-server`.
+
+### Build Steps
+
+```bash
+# 1. Build the frontend and create the embedded Rust asset archive
+pnpm run build:rust-assets
+
+# 2. Compile the Rust single-binary server
+pnpm run build:rust
+```
+
+`build:rust-assets` creates a staging `tar` archive first, and the Rust build step then compresses it into an embedded `tar.zst` payload to reduce the final executable size.
+
+On Windows, the default output is:
+
+```text
+rust-server/target/release/document-server.exe
+```
+
+### Runtime Behavior
+
+- On first launch, the executable extracts the embedded static assets into `.document-runtime/` next to the executable
+- The actual extracted asset directory is `.document-runtime/assets/<asset-hash>/`
+- The server listens on `127.0.0.1:18080` by default
+- If the port is already occupied, it automatically retries with `+1` until it succeeds
+- The executable does not open a browser automatically and does not show a desktop window
+
+### Integrating with Node `exec`
+
+The default launch mode is designed to be called by Node's `exec`. On success, the launcher prints a single-line JSON payload to stdout:
+
+```json
+{"ok":true,"port":18080,"url":"http://127.0.0.1:18080/","pid":12345}
+```
+
+On Windows, if you do not want a command window to appear during launch, call it from Node with `exec(..., { windowsHide: true })`. The Rust code keeps stdout available for the launch result and still starts the background `serve` child in hidden mode.
+
+If a healthy instance is already running, the launcher returns the existing port instead of starting a duplicate background service.
+
+### Runtime State File
+
+The executable writes the current runtime status to `.document-runtime/runtime.json`, including:
+
+- `pid`
+- `host`
+- `port`
+- `url`
+- `asset_hash`
+- `asset_dir`
+- `started_at`
+
+You can read this file to discover the active port and extracted asset directory.
+
 ## 🔤 Font Management
 
 ### Font Files in This Project

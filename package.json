@@ -6,6 +6,13 @@
   "scripts": {
     "dev": "vite --host --force",
     "build": "sh ./bin/build.sh",
+    "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./bin/build.ps1",
+    "build:web": "node ./bin/build_web.mjs",
+    "build:rust-assets": "pnpm run build:web && node ./bin/package_dist_for_rust.mjs",
+    "build:rust": "pnpm run build:rust-assets && cargo build --release --manifest-path ./rust-server/Cargo.toml",
+    "release:rust:win": "pnpm run build:rust-assets && cargo build --release --manifest-path ./rust-server/Cargo.toml --target x86_64-pc-windows-msvc",
+    "release:rust:mac": "pnpm run build:rust-assets && cargo build --release --manifest-path ./rust-server/Cargo.toml --target x86_64-apple-darwin",
+    "release:rust:linux": "pnpm run build:rust-assets && cargo build --release --manifest-path ./rust-server/Cargo.toml --target x86_64-unknown-linux-gnu",
     "build:single": "node bin/bundle_single_html.js",
     "preview": "vite preview",
     "tsc": "tsc --noEmit",

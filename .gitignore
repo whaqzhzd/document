@@ -11,3 +11,6 @@ cache
 vite.config.ts.timestamp*
 config.ts.timestamp*
 dist
+rust-server/target
+rust-server/assets/*
+!rust-server/assets/.gitkeep
