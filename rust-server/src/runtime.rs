@@ -11,6 +11,7 @@ const RUNTIME_ROOT: &str = ".document-runtime";
 const LOCK_FILE_NAME: &str = "server.lock";
 const STATE_FILE_NAME: &str = "runtime.json";
 const HEALTH_PATH: &str = "/__health";
+const DIST_DIR_NAME: &str = "document-dist";
 
 #[derive(Debug)]
 pub struct RuntimePaths {
@@ -70,8 +71,26 @@ pub fn ensure_runtime_dirs(paths: &RuntimePaths) -> Result<(), String> {
     Ok(())
 }
 
-pub fn asset_dir(paths: &RuntimePaths, asset_hash: &str) -> PathBuf {
-    paths.assets_root.join(asset_hash)
+pub fn resolve_server_asset_dir() -> Result<PathBuf, String> {
+    let exe_path = std::env::current_exe().map_err(|error| format!("failed to resolve current exe path: {error}"))?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| format!("failed to resolve exe directory from {}", exe_path.display()))?;
+    let dist_dir = exe_dir.join(DIST_DIR_NAME);
+
+    if !dist_dir.is_dir() {
+        return Err(format!(
+            "missing document-dist directory next to server binary: {}",
+            dist_dir.display()
+        ));
+    }
+
+    let index_path = dist_dir.join("index.html");
+    if !index_path.is_file() {
+        return Err(format!("missing index.html in document-dist: {}", index_path.display()));
+    }
+
+    Ok(dist_dir)
 }
 
 pub fn acquire_lock(paths: &RuntimePaths) -> Result<RuntimeLock, String> {

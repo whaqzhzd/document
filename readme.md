@@ -141,21 +141,16 @@ npm install
 npm run dev
 ```
 
-## 🦀 Rust Single-Binary Server
+## 🦀 Rust Standalone Server
 
-If you want to package the frontend assets and the local static server into a single executable, use the Rust solution in `document/rust-server`.
+If you want to distribute the frontend assets and the local static server as an **isolated process**, use the Rust solution in `document/rust-server`. This mode keeps the frontend files outside the executable and ships them as `document-server.exe + document-dist/`.
 
 ### Build Steps
 
 ```bash
-# 1. Build the frontend and create the embedded Rust asset archive
-pnpm run build:rust-assets
-
-# 2. Compile the Rust single-binary server
+# Build the frontend and compile the Rust server
 pnpm run build:rust
 ```
-
-`build:rust-assets` creates a staging `tar` archive first, and the Rust build step then compresses it into an embedded `tar.zst` payload to reduce the final executable size.
 
 On Windows, the default output is:
 
@@ -165,8 +160,8 @@ rust-server/target/release/document-server.exe
 
 ### Runtime Behavior
 
-- On first launch, the executable extracts the embedded static assets into `.document-runtime/` next to the executable
-- The actual extracted asset directory is `.document-runtime/assets/<asset-hash>/`
+- The executable reads `document-dist/` next to the server binary
+- `document-dist/` must contain `index.html` and the full frontend asset set
 - The server listens on `127.0.0.1:18080` by default
 - If the port is already occupied, it automatically retries with `+1` until it succeeds
 - The executable does not open a browser automatically and does not show a desktop window
@@ -195,7 +190,7 @@ The executable writes the current runtime status to `.document-runtime/runtime.j
 - `asset_dir`
 - `started_at`
 
-You can read this file to discover the active port and extracted asset directory.
+You can read this file to discover the active port and asset directory.
 
 ## 🔤 Font Management
 

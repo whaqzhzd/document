@@ -1,11 +1,9 @@
-mod archive;
 mod runtime;
 mod server;
 
-use archive::{embedded_metadata, ensure_assets_extracted};
 use runtime::{
-    acquire_lock, asset_dir, clear_state, current_pid, current_timestamp, ensure_runtime_dirs, normalize_asset_dir,
-    read_state, resolve_runtime_paths, wait_for_health, write_state, RuntimeState,
+    acquire_lock, clear_state, current_pid, current_timestamp, ensure_runtime_dirs, normalize_asset_dir, read_state,
+    resolve_runtime_paths, resolve_server_asset_dir, wait_for_health, write_state, RuntimeState,
 };
 use serde::Serialize;
 use std::env;
@@ -69,13 +67,10 @@ async fn launch_mode() -> Result<(), String> {
     }
 
     clear_state(&paths);
-
-    let metadata = embedded_metadata()?;
-    let asset_directory = asset_dir(&paths, &metadata.asset_hash);
-    ensure_assets_extracted(&asset_directory, &metadata.asset_hash)?;
+    let asset_directory = resolve_server_asset_dir()?;
 
     let port = find_available_port(BASE_PORT, MAX_PORT_ATTEMPTS)?;
-    let child = spawn_serve_process(port, &asset_directory, &metadata.asset_hash)?;
+    let child = spawn_serve_process(port, &asset_directory)?;
 
     if !wait_for_health(HOST, port, 80) {
         return Err(format!("background serve process failed health check on port {port}"));
@@ -95,7 +90,6 @@ async fn launch_mode() -> Result<(), String> {
 
 async fn serve_mode() -> Result<(), String> {
     let port = env_required_u16("DOCUMENT_SERVER_PORT")?;
-    let asset_hash = env_required("DOCUMENT_SERVER_ASSET_HASH")?;
     let asset_dir = PathBuf::from(env_required("DOCUMENT_SERVER_ASSET_DIR")?);
 
     let paths = resolve_runtime_paths()?;
@@ -107,7 +101,7 @@ async fn serve_mode() -> Result<(), String> {
         host: HOST.to_string(),
         port,
         url: format!("http://{HOST}:{port}/"),
-        asset_hash,
+        asset_hash: "external-dist".to_string(),
         asset_dir: normalize_asset_dir(&asset_dir),
         started_at: current_timestamp(),
     };
@@ -129,13 +123,12 @@ fn find_available_port(base_port: u16, max_attempts: usize) -> Result<u16, Strin
     ))
 }
 
-fn spawn_serve_process(port: u16, asset_dir: &PathBuf, asset_hash: &str) -> Result<process::Child, String> {
+fn spawn_serve_process(port: u16, asset_dir: &PathBuf) -> Result<process::Child, String> {
     let current_exe = env::current_exe().map_err(|error| format!("failed to resolve current exe: {error}"))?;
     let mut command = Command::new(current_exe);
     command
         .arg("serve")
         .env("DOCUMENT_SERVER_PORT", port.to_string())
-        .env("DOCUMENT_SERVER_ASSET_HASH", asset_hash)
         .env("DOCUMENT_SERVER_ASSET_DIR", asset_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

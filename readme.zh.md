@@ -141,21 +141,16 @@ npm install
 npm run dev
 ```
 
-## 🦀 Rust 单文件服务
+## 🦀 Rust 独立服务
 
-如果您希望把前端资源和本地静态服务一起打包为单文件程序，可以使用 `document/rust-server` 提供的 Rust 方案。
+如果您希望将前端资源和本地静态服务作为**独立进程**分发，可以使用 `document/rust-server` 提供的 Rust 方案。该方案不会将前端资源内嵌进可执行文件，而是采用 `document-server.exe + document-dist/` 并列分发的方式。
 
 ### 构建步骤
 
 ```bash
-# 1. 构建前端并生成 Rust 内嵌资源归档
-pnpm run build:rust-assets
-
-# 2. 编译 Rust 单文件服务程序
+# 构建前端并编译 Rust 服务程序
 pnpm run build:rust
 ```
-
-其中 `build:rust-assets` 会先生成中间 `tar` 归档，再由 Rust 编译阶段压缩为内嵌的 `tar.zst` 资源，以减小最终可执行文件体积。
 
 Windows 产物默认位于：
 
@@ -165,8 +160,8 @@ rust-server/target/release/document-server.exe
 
 ### 运行方式
 
-- 首次启动时，程序会将内嵌静态资源解压到**程序同目录**下的 `.document-runtime/`
-- 实际静态资源目录为 `.document-runtime/assets/<asset-hash>/`
+- `document-server.exe` 启动时，会读取**可执行文件同目录**下的 `document-dist/`
+- `document-dist/` 中必须包含 `index.html` 以及前端运行所需的全部静态资源
 - 服务默认监听 `127.0.0.1:18080`
 - 如果端口被占用，会自动尝试 `+1`，直到找到可用端口
 - 程序不会自动打开浏览器，也不会弹桌面窗口
