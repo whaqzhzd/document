@@ -171,12 +171,40 @@ rust-server/target/release/document-server.exe
 The default launch mode is designed to be called by Node's `exec`. On success, the launcher prints a single-line JSON payload to stdout:
 
 ```json
-{"ok":true,"port":18080,"url":"http://127.0.0.1:18080/","pid":12345}
+{"ok":true,"port":18080,"url":"http://127.0.0.1:18080/","pid":12345,"service":"document-server","instance_id":"document-server-12345-...","reused":false}
 ```
 
 On Windows, if you do not want a command window to appear during launch, call it from Node with `exec(..., { windowsHide: true })`. The Rust code keeps stdout available for the launch result and still starts the background `serve` child in hidden mode.
 
 If a healthy instance is already running, the launcher returns the existing port instead of starting a duplicate background service.
+
+### Health Check
+
+The server exposes `GET /__health` so external processes can verify whether the process behind the port is a reusable `document-server` instance. A successful response looks like:
+
+```json
+{"ok":true,"service":"document-server","pid":12345,"port":18080,"asset_dir":"D:\\app\\ppt-server\\document-dist","instance_id":"document-server-12345-..."}
+```
+
+Recommended flow:
+
+- read `.document-runtime/runtime.json`
+- request `__health`
+- only treat the instance as reusable when `service`, `instance_id`, `port`, and `asset_dir` all match
+
+### Stopping the Server
+
+To stop the background service from an external process, run:
+
+```bash
+document-server.exe stop
+```
+
+On success it prints a single-line JSON payload, for example:
+
+```json
+{"ok":true,"stopped":true,"pid":12345}
+```
 
 ### Runtime State File
 
@@ -186,8 +214,11 @@ The executable writes the current runtime status to `.document-runtime/runtime.j
 - `host`
 - `port`
 - `url`
+- `service`
+- `instance_id`
 - `asset_hash`
 - `asset_dir`
+- `exe_path`
 - `started_at`
 
 You can read this file to discover the active port and asset directory.

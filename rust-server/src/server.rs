@@ -2,8 +2,10 @@ use axum::body::Body;
 use axum::extract::{Path as AxumPath, State};
 use axum::http::{header, HeaderValue, Response, StatusCode};
 use axum::response::IntoResponse;
+use axum::Json;
 use axum::routing::get;
 use axum::Router;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::net::TcpListener;
@@ -11,9 +13,28 @@ use tokio::net::TcpListener;
 #[derive(Clone)]
 pub struct ServerState {
     pub asset_dir: PathBuf,
+    pub instance_id: String,
+    pub port: u16,
+    pub pid: u32,
 }
 
-pub async fn run_server(asset_dir: PathBuf, host: &str, port: u16) -> Result<(), String> {
+#[derive(Serialize)]
+struct HealthResponse {
+    ok: bool,
+    service: &'static str,
+    pid: u32,
+    port: u16,
+    asset_dir: String,
+    instance_id: String,
+}
+
+pub async fn run_server(
+    asset_dir: PathBuf,
+    host: &str,
+    port: u16,
+    instance_id: String,
+    pid: u32,
+) -> Result<(), String> {
     let bind_address = format!("{host}:{port}");
     let listener = TcpListener::bind(&bind_address)
         .await
@@ -23,7 +44,12 @@ pub async fn run_server(asset_dir: PathBuf, host: &str, port: u16) -> Result<(),
         .route("/__health", get(health))
         .route("/", get(index))
         .route("/{*path}", get(static_or_index))
-        .with_state(ServerState { asset_dir });
+        .with_state(ServerState {
+            asset_dir,
+            instance_id,
+            port,
+            pid,
+        });
 
     axum::serve(listener, app)
         .await
@@ -32,8 +58,15 @@ pub async fn run_server(asset_dir: PathBuf, host: &str, port: u16) -> Result<(),
     Ok(())
 }
 
-async fn health() -> impl IntoResponse {
-    (StatusCode::OK, "ok")
+async fn health(State(state): State<ServerState>) -> impl IntoResponse {
+    Json(HealthResponse {
+        ok: true,
+        service: crate::runtime::SERVICE_NAME,
+        pid: state.pid,
+        port: state.port,
+        asset_dir: state.asset_dir.to_string_lossy().to_string(),
+        instance_id: state.instance_id,
+    })
 }
 
 async fn index(State(state): State<ServerState>) -> impl IntoResponse {

@@ -171,12 +171,40 @@ rust-server/target/release/document-server.exe
 默认启动模式适合被 Node 的 `exec` 调用。启动成功后，程序会通过 stdout 返回单行 JSON：
 
 ```json
-{"ok":true,"port":18080,"url":"http://127.0.0.1:18080/","pid":12345}
+{"ok":true,"port":18080,"url":"http://127.0.0.1:18080/","pid":12345,"service":"document-server","instance_id":"document-server-12345-...","reused":false}
 ```
 
 在 Windows 上，如果您不希望调用时弹出命令窗口，请在 Node 侧使用 `exec(..., { windowsHide: true })`。Rust 只负责让后台 `serve` 子进程以隐藏方式常驻运行，同时保留启动器 stdout 以回传端口信息。
 
 如果已存在健康实例，则会直接返回现有端口，而不会重复启动后台服务。
+
+### 健康检查
+
+服务提供 `GET /__health` 用于外部进程判断当前端口上的服务是否为可复用实例。成功时返回 JSON，例如：
+
+```json
+{"ok":true,"service":"document-server","pid":12345,"port":18080,"asset_dir":"D:\\app\\ppt-server\\document-dist","instance_id":"document-server-12345-..."}
+```
+
+推荐做法：
+
+- 先读取 `.document-runtime/runtime.json`
+- 再请求 `__health`
+- 只有 `service`、`instance_id`、`port`、`asset_dir` 等关键字段匹配时，才视为同一服务实例
+
+### 停止服务
+
+如需由外部进程主动关闭服务，可执行：
+
+```bash
+document-server.exe stop
+```
+
+成功时会返回单行 JSON，例如：
+
+```json
+{"ok":true,"stopped":true,"pid":12345}
+```
 
 ### 运行状态文件
 
@@ -186,8 +214,11 @@ rust-server/target/release/document-server.exe
 - `host`
 - `port`
 - `url`
+- `service`
+- `instance_id`
 - `asset_hash`
 - `asset_dir`
+- `exe_path`
 - `started_at`
 
 您可以通过读取该文件来获取当前端口和资源目录。

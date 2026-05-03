@@ -12,6 +12,7 @@ const LOCK_FILE_NAME: &str = "server.lock";
 const STATE_FILE_NAME: &str = "runtime.json";
 const HEALTH_PATH: &str = "/__health";
 const DIST_DIR_NAME: &str = "document-dist";
+pub const SERVICE_NAME: &str = "document-server";
 
 #[derive(Debug)]
 pub struct RuntimePaths {
@@ -32,17 +33,48 @@ pub struct RuntimeState {
     pub host: String,
     pub port: u16,
     pub url: String,
+    pub service: String,
+    #[serde(rename = "instance_id")]
+    pub instance_id: String,
     #[serde(rename = "asset_hash")]
     pub asset_hash: String,
     #[serde(rename = "asset_dir")]
     pub asset_dir: String,
+    #[serde(rename = "exe_path")]
+    pub exe_path: String,
     #[serde(rename = "started_at")]
     pub started_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    pub ok: bool,
+    pub service: String,
+    pub pid: u32,
+    pub port: u16,
+    #[serde(rename = "asset_dir")]
+    pub asset_dir: String,
+    #[serde(rename = "instance_id")]
+    pub instance_id: String,
+}
+
 impl RuntimeState {
     pub fn is_healthy(&self) -> bool {
-        probe_http_health(&self.host, self.port)
+        self.read_health()
+            .map(|health| self.matches_health(&health))
+            .unwrap_or(false)
+    }
+
+    pub fn read_health(&self) -> Option<HealthResponse> {
+        probe_http_health_detail(&self.host, self.port)
+    }
+
+    pub fn matches_health(&self, health: &HealthResponse) -> bool {
+        health.ok
+            && health.service == self.service
+            && health.instance_id == self.instance_id
+            && health.port == self.port
+            && health.asset_dir == self.asset_dir
     }
 }
 
@@ -135,10 +167,16 @@ pub fn current_timestamp() -> String {
 }
 
 pub fn probe_http_health(host: &str, port: u16) -> bool {
+    probe_http_health_detail(host, port)
+        .map(|health| health.ok && health.service == SERVICE_NAME && health.port == port)
+        .unwrap_or(false)
+}
+
+pub fn probe_http_health_detail(host: &str, port: u16) -> Option<HealthResponse> {
     let address = format!("{host}:{port}");
     let mut stream = match TcpStream::connect(address) {
         Ok(stream) => stream,
-        Err(_) => return false,
+        Err(_) => return None,
     };
 
     let _ = stream.set_read_timeout(Some(Duration::from_millis(800)));
@@ -149,15 +187,20 @@ pub fn probe_http_health(host: &str, port: u16) -> bool {
     );
 
     if stream.write_all(request.as_bytes()).is_err() {
-        return false;
+        return None;
     }
 
     let mut response = String::new();
     if stream.read_to_string(&mut response).is_err() {
-        return false;
+        return None;
     }
 
-    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+    if !(response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")) {
+        return None;
+    }
+
+    let (_, body) = response.split_once("\r\n\r\n")?;
+    serde_json::from_str::<HealthResponse>(body).ok()
 }
 
 pub fn wait_for_health(host: &str, port: u16, attempts: usize) -> bool {
@@ -179,4 +222,12 @@ impl Drop for RuntimeLock {
 
 pub fn normalize_asset_dir(path: &Path) -> String {
     path.to_string_lossy().to_string()
+}
+
+pub fn generate_instance_id() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    format!("{}-{}-{nanos}", SERVICE_NAME, process::id())
 }
