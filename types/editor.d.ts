@@ -90,10 +90,20 @@ interface DocsAPI {
   DocEditor: new (elementId: string, config: DocEditorConfig) => DocEditor;
 }
 
+interface PresentationEditorViewportController {
+  onPreviewStart: (slideIndex?: number, useCurrentDocument?: unknown, skipFullscreen?: boolean) => void;
+}
+
+interface PresentationEditorGlobal {
+  getController: (name: 'Viewport') => PresentationEditorViewportController | undefined;
+}
+
 declare global {
   interface Window {
     onCreateNew: (ext: string) => Promise<void>;
     DocsAPI: DocsAPI;
     editor: DocEditor;
+    PE?: PresentationEditorGlobal;
+    __DOCUMENT_SLIDESHOW__?: boolean;
   }
 }

@@ -17,6 +17,7 @@ declare global {
     onCreateNew: (ext: string) => Promise<void>;
     hideControlPanel?: () => void;
     showControlPanel?: () => void;
+    __DOCUMENT_SLIDESHOW__?: boolean;
     DocsAPI: {
       DocEditor: new (elementId: string, config: any) => any;
     };
@@ -57,7 +58,11 @@ createControlPanel();
 //   ?file=https://example.com/doc.docx
 //   ?src=https://example.com/doc.docx
 //   ?file=doc1.docx&src=doc2.xlsx (will use file: doc1.docx)
-const { file, src } = getAllQueryString();
+const { file, src, slideshow } = getAllQueryString();
+if (slideshow === '1') {
+  window.__DOCUMENT_SLIDESHOW__ = true;
+  console.log('[Document Slideshow] 已启用放映模式参数');
+}
 const documentUrl = file || src;
 if (documentUrl) {
   // Decode URL if it's encoded
