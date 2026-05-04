@@ -1,9 +1,9 @@
 use axum::body::Body;
 use axum::extract::{Path as AxumPath, State};
-use axum::http::{header, HeaderValue, Response, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, Response, StatusCode};
 use axum::response::IntoResponse;
-use axum::Json;
 use axum::routing::get;
+use axum::Json;
 use axum::Router;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -69,26 +69,37 @@ async fn health(State(state): State<ServerState>) -> impl IntoResponse {
     })
 }
 
-async fn index(State(state): State<ServerState>) -> impl IntoResponse {
-    serve_path_or_404(&state.asset_dir.join("index.html")).await
+async fn index(State(state): State<ServerState>, headers: HeaderMap) -> impl IntoResponse {
+    serve_path_or_404(&state.asset_dir.join("index.html"), &headers).await
 }
 
 async fn static_or_index(
     State(state): State<ServerState>,
+    headers: HeaderMap,
     AxumPath(path): AxumPath<String>,
 ) -> impl IntoResponse {
     let relative = sanitize_relative_path(&path);
     let target_path = state.asset_dir.join(&relative);
 
-    if is_safe_path(&state.asset_dir, &target_path) && target_path.is_file() {
-        return serve_path_or_404(&target_path).await;
+    if is_safe_path(&state.asset_dir, &target_path) && is_static_asset_available(&target_path) {
+        return serve_path_or_404(&target_path, &headers).await;
     }
 
-    serve_path_or_404(&state.asset_dir.join("index.html")).await
+    serve_path_or_404(&state.asset_dir.join("index.html"), &headers).await
 }
 
-async fn serve_path_or_404(path: &Path) -> Response<Body> {
-    let content = match fs::read(path).await {
+async fn serve_path_or_404(path: &Path, request_headers: &HeaderMap) -> Response<Body> {
+    let brotli_path = brotli_variant_path(path);
+    let should_serve_brotli = path.extension().and_then(|value| value.to_str()) == Some("wasm")
+        && accepts_brotli(request_headers)
+        && brotli_path.is_file();
+    let content_path = if should_serve_brotli {
+        &brotli_path
+    } else {
+        path
+    };
+
+    let content = match fs::read(content_path).await {
         Ok(content) => content,
         Err(_) => return (StatusCode::NOT_FOUND, "Not Found").into_response(),
     };
@@ -100,8 +111,14 @@ async fn serve_path_or_404(path: &Path) -> Response<Body> {
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(mime.as_ref()).unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+        HeaderValue::from_str(mime.as_ref())
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
     );
+
+    if should_serve_brotli {
+        headers.insert(header::CONTENT_ENCODING, HeaderValue::from_static("br"));
+        headers.insert(header::VARY, HeaderValue::from_static("Accept-Encoding"));
+    }
 
     if should_disable_cache(path) {
         headers.insert(
@@ -109,10 +126,39 @@ async fn serve_path_or_404(path: &Path) -> Response<Body> {
             HeaderValue::from_static("no-cache, no-store, must-revalidate"),
         );
     } else {
-        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
+        headers.insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
     }
 
     response
+}
+
+fn is_static_asset_available(path: &Path) -> bool {
+    path.is_file() || brotli_variant_path(path).is_file()
+}
+
+fn brotli_variant_path(path: &Path) -> PathBuf {
+    path.with_extension(format!(
+        "{}.br",
+        path.extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+    ))
+}
+
+fn accepts_brotli(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(',')
+                .filter_map(|encoding| encoding.trim().split(';').next())
+                .any(|encoding| encoding.eq_ignore_ascii_case("br"))
+        })
+        .unwrap_or(false)
 }
 
 fn sanitize_relative_path(path: &str) -> PathBuf {
