@@ -17063,7 +17063,9 @@ function _extend_object(t, e) {
                           : ((i.elUserName = e.find('.btn-current-user')), i.elUserName)
                         ).removeClass('hidden'),
                         (l = e.find('.color-user-name')),
-                        i.setUserName(i.options.userName)),
+                        i.setUserName(
+                          i.options.userName || (a.user && (a.user.fullname || a.user.name)) || 'Guest',
+                        )),
                       !c && a && ((a.sharingSettingsUrl && a.sharingSettingsUrl.length) || a.canRequestSharingSettings)
                         ? ((i.btnShare = new Common.UI.Button({
                             cls: 'btn-header btn-header-share',
@@ -43510,6 +43512,7 @@ var c_oHyperlinkType = { InternalLink: 0, WebLink: 1 },
             var t, e, i, n;
             return (
               !(a.length < 1) &&
+              !!(this.$tabs && this.$tabs.length) &&
               ((t = Math.round(a.offset().left)),
               (e = Math.round(t + a.width())),
               !!(i = this.$tabs.filter(Common.UI.isRTL() ? ':visible:last' : ':visible:first').get(0)) &&

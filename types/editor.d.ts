@@ -5,6 +5,11 @@ interface PluginConfig {
 }
 
 interface DocEditorConfig {
+  user?: {
+    id: string;
+    name?: string;
+  };
+  documentType?: string;
   document: {
     title: string;
     url: string;
@@ -17,10 +22,23 @@ interface DocEditorConfig {
   };
   editorConfig: {
     lang: string;
+    mode?: 'edit' | 'view';
+    user?: {
+      id: string;
+      name?: string;
+    };
     customization: {
       help: boolean;
       about: boolean;
       hideRightMenu: boolean;
+      toolbar?: boolean;
+      compactHeader?: boolean;
+      toolbarNoTabs?: boolean;
+      toolbarHideFileName?: boolean;
+      statusBar?: boolean;
+      comments?: boolean;
+      hideRulers?: boolean;
+      hideNotes?: boolean;
       /** Enable/disable plugins. Set to false to disable plugins */
       plugins?: boolean;
       features: {
@@ -104,6 +122,5 @@ declare global {
     DocsAPI: DocsAPI;
     editor: DocEditor;
     PE?: PresentationEditorGlobal;
-    __DOCUMENT_SLIDESHOW__?: boolean;
   }
 }

@@ -52,9 +52,17 @@ self.addEventListener('fetch', (event) => {
   // 2. Only handle same-origin requests to avoid caching external APIs/documents
   if (url.origin !== self.location.origin) return;
 
-  // 3. Skip caching for requests with dynamic parameters (like ?file= or ?src=)
-  // These are typically documents being edited, which should always be fresh.
-  if (url.searchParams.has('file') || url.searchParams.has('src')) return;
+  // 3. Skip caching for dynamic entry points/documents.
+  // PPT slideshow is embedded by the host app and must always load the current
+  // HTML so it can point at the current hashed JS bundle.
+  const isPptSlideshow = url.pathname.endsWith('/ppt-slideshow.html')
+    || url.pathname.endsWith('ppt-slideshow.html')
+    || url.searchParams.has('pptCacheBust');
+  if (
+    isPptSlideshow
+    || url.searchParams.has('file')
+    || url.searchParams.has('src')
+  ) return;
 
   // 4. Determine Strategy
   const isHtml = event.request.mode === 'navigate' ||

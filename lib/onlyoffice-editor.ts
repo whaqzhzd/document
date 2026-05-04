@@ -20,112 +20,6 @@ export function setConverterCallback(
 // Global media mapping object
 const media: Record<string, string> = {};
 
-type SlideshowLogLevel = 'info' | 'warn' | 'error';
-
-type PresentationEditorViewportController = {
-  onPreviewStart: (slideIndex?: number, useCurrentDocument?: unknown, skipFullscreen?: boolean) => void;
-};
-
-type PresentationEditorGlobal = {
-  getController?: (name: 'Viewport') => PresentationEditorViewportController | undefined;
-};
-
-const emitSlideshowLog = (
-  level: SlideshowLogLevel,
-  message: string,
-  detail?: Record<string, unknown>,
-) => {
-  const payload = {
-    source: 'document-slideshow-log',
-    level,
-    message,
-    detail: detail ?? null,
-    timestamp: new Date().toISOString(),
-  };
-
-  try {
-    const logger = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-    logger('[Document Slideshow]', message, detail ?? '');
-  } catch {
-    // noop
-  }
-
-  try {
-    window.parent?.postMessage(payload, '*');
-  } catch (error) {
-    console.warn('Failed to post slideshow log to parent window:', error);
-  }
-};
-
-const getPresentationEditorGlobal = (): PresentationEditorGlobal | null => {
-  if (window.PE) {
-    return window.PE;
-  }
-
-  const iframeContainer = document.getElementById('iframe');
-  const editorFrame = iframeContainer?.querySelector('iframe') as HTMLIFrameElement | null;
-  const frameWindow = editorFrame?.contentWindow as (Window & { PE?: PresentationEditorGlobal }) | null;
-  return frameWindow?.PE ?? null;
-};
-
-const startPresentationSlideshowIfNeeded = () => {
-  if (!window.__DOCUMENT_SLIDESHOW__) {
-    emitSlideshowLog('info', '未启用放映模式，跳过自动进入放映态');
-    return;
-  }
-
-  emitSlideshowLog('info', '检测到放映模式，准备自动进入 PPT 放映态');
-
-  const maxAttempts = 10;
-  const retryDelayMs = 300;
-
-  const start = (attempt: number) => {
-    try {
-      const presentationEditor = getPresentationEditorGlobal();
-      const hasPe = !!presentationEditor;
-      const viewportController = presentationEditor?.getController?.('Viewport');
-      const hasPreviewStart = typeof viewportController?.onPreviewStart === 'function';
-
-      emitSlideshowLog('info', '检查放映入口状态', {
-        attempt,
-        hasPe,
-        hasViewportController: !!viewportController,
-        hasPreviewStart,
-      });
-
-      if (!hasPreviewStart) {
-        if (attempt >= maxAttempts) {
-          emitSlideshowLog('warn', '放映入口未就绪，已达到最大重试次数', {
-            attempt,
-            maxAttempts,
-          });
-          return;
-        }
-
-        window.setTimeout(() => start(attempt + 1), retryDelayMs);
-        return;
-      }
-
-      emitSlideshowLog('info', '调用 PPT 放映入口', {
-        attempt,
-        slideIndex: 0,
-        skipFullscreen: false,
-      });
-      viewportController.onPreviewStart(0, null, false);
-      emitSlideshowLog('info', '已触发 PPT 放映入口');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      emitSlideshowLog('error', '触发 PPT 放映入口失败', {
-        attempt,
-        error: errorMessage,
-      });
-      console.error('Failed to start presentation slideshow:', error);
-    }
-  };
-
-  window.setTimeout(() => start(1), 0);
-};
-
 // Editor operation queue to prevent concurrent operations
 let editorOperationQueue: Promise<void> = Promise.resolve();
 
@@ -387,14 +281,6 @@ export function createEditorInstance(config: {
           },
           onDocumentReady: () => {
             console.log(`${t('documentLoaded')}${fileName}`);
-            emitSlideshowLog('info', '文档加载完成', {
-              fileName,
-              fileType,
-              slideshowEnabled: !!window.__DOCUMENT_SLIDESHOW__,
-            });
-            if (fileType === 'pptx' || fileType === 'ppt') {
-              startPresentationSlideshowIfNeeded();
-            }
             // Note: For CSV files, the save dialog may show XLSX format,
             // but the actual save will be forced to CSV format in handleSaveDocument
           },
@@ -421,7 +307,7 @@ export function loadEditorApi(): Promise<void> {
 
     // Load editor API
     const script = document.createElement('script');
-    script.src = './web-apps/apps/api/documents/api.js';
+    script.src = `./web-apps/apps/api/documents/api.js?v=${Date.now()}`;
     script.onload = () => resolve();
     script.onerror = (error) => {
       console.error('Failed to load OnlyOffice API:', error);

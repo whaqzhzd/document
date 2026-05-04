@@ -211,7 +211,7 @@
               return (n += a);
             })(e) +
             (function (e) {
-              var t = '?_dc=0';
+              var t = '?_dc=' + Date.now();
               e.editorConfig && e.editorConfig.lang && (t += '&lang=' + e.editorConfig.lang);
               e.editorConfig &&
                 'desktop' !== e.editorConfig.targetApp &&
